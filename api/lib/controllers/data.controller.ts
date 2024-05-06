@@ -2,6 +2,9 @@ import { checkIdParam } from "../middlewares/deviceIdParam.middleware";
 import Controller from "../interfaces/controller.interface";
 import { Request, Response, NextFunction, Router } from 'express';
 import DataService from "../modules/services/data.service";
+import Joi from "joi";
+import { IData } from "../modules/models/data.model";
+
 
 class DataController implements Controller {
     public path = '/api/data';
@@ -30,17 +33,30 @@ class DataController implements Controller {
     private addData = async (request: Request, response: Response, next: NextFunction) => {
         const { air } = request.body;
         const { id } = request.params;
-     
-        const data = {
-            temperature: parseInt(air[0].value),
-            pressure: parseInt(air[1].value),
-            humidity: parseInt(air[2].value),
-            deviceId: parseInt(id)
-        }
+
+        const schema = Joi.object({
+            air: Joi.array()
+                .items(
+                    Joi.object({
+                        id: Joi.number().integer().positive().required(),
+                        value: Joi.number().positive().required()
+                    })
+                )
+                .unique((a, b) => a.id === b.id),
+            deviceId: Joi.number().integer().positive().valid(parseInt(id, 10)).required()
+        });
        
         try {
-            await this.dataService.createData(data);
-            response.status(200).json(data);
+            const validateData = await schema.validateAsync({air, deviceId: parseInt(id, 10)});
+            const readingData: IData = {
+                temperature: validateData.air[0].value,
+                pressure: validateData.air[1].value,
+                humidity: validateData.air[2].value,
+                deviceId: validateData.deviceId
+            };
+
+            await this.dataService.createData(readingData);
+            response.status(200).json(readingData);
         } catch (error) {
             console.error(`Validation Error: ${error.message}`);
             response.status(400).json({ error: 'Invalid input data.' });
@@ -98,3 +114,11 @@ class DataController implements Controller {
  
  export default DataController;
  
+/* 
+{
+  "air": [
+    {"id": 1, "value": 10},
+    {"id": 2, "value": 966},
+    {"id": 3, "value": 23}
+  ]
+} */
